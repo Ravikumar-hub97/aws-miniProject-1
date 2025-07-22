@@ -1,19 +1,26 @@
 version: 0.2
 
 phases:
+  install:
+    runtime-versions:
+      docker: 20
+
   pre_build:
     commands:
       - echo Logging in to Amazon ECR...
       - aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin 992757690557.dkr.ecr.us-east-1.amazonaws.com
+      - echo Updating kubeconfig...
+      - aws eks update-kubeconfig --name miniproject1 --region us-east-1
+
   build:
     commands:
-      - echo Build started
-      - docker build -t miniproject1/braintask ..
+      - echo Building Docker image...
+      - docker build -t miniproject1/braintask .
       - docker tag miniproject1/braintask:latest 992757690557.dkr.ecr.us-east-1.amazonaws.com/miniproject1/braintask:latest
+
   post_build:
     commands:
       - echo Pushing image to ECR...
       - docker push 992757690557.dkr.ecr.us-east-1.amazonaws.com/miniproject1/braintask:latest
-      - echo Applying Kubernetes manifests...
-      - aws eks update-kubeconfig --region us-east-1 --name miniproject1
+      - echo Deploying to EKS...
       - kubectl apply -f k8s/
