@@ -22,10 +22,19 @@ phases:
   build:
     commands:
       - echo "Build phase starting"
+      - echo "Checking current directory and files"
+      - pwd
+      - ls -la
+      - echo "Checking if Dockerfile exists"
+      - cat Dockerfile || echo "Dockerfile not found"
+      - echo "Checking dist directory"
+      - ls -la dist/ || echo "dist directory not found"
       - echo "Building Docker image"
-      - docker build -t braintask .
+      - docker build -t braintask . || echo "Docker build failed"
+      - echo "Checking if image was created"
+      - docker images | grep braintask || echo "Image not found"
       - echo "Tagging Docker image"
-      - docker tag braintask:latest 992757690557.dkr.ecr.us-east-1.amazonaws.com/miniproject1/braintask:latest
+      - docker tag braintask:latest 992757690557.dkr.ecr.us-east-1.amazonaws.com/miniproject1/braintask:latest || echo "Tagging failed"
   post_build:
     commands:
       - echo "Post-build phase starting"
