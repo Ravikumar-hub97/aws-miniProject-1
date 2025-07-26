@@ -15,6 +15,11 @@ phases:
       - echo Updating kubeconfig...
       - aws eks update-kubeconfig --name project-cluster --region us-east-1 || exit 1
       - echo Verifying kubectl can talk to the cluster...
+      - echo "Checking kubectl access..."
+      - aws sts get-caller-identity
+      - aws eks describe-cluster --name project-cluster --region us-east-1
+      - kubectl version --short
+      - kubectl get nodes || exit 1
       - kubectl get nodes || exit 1
   build:
     commands:
