@@ -10,9 +10,9 @@ phases:
       docker: 19
     commands:
       - echo "Installing dependencies..."
-      # Update package manager
-      - apt-get update -y
-      - apt-get install -y unzip curl
+      # Update package manager for Amazon Linux
+      - yum update -y
+      - yum install -y unzip curl
       # Install AWS CLI v2
       - echo "Installing AWS CLI v2..."
       - curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
@@ -23,7 +23,8 @@ phases:
       - echo "Installing kubectl..."
       - curl -o kubectl https://s3.us-west-2.amazonaws.com/amazon-eks/1.29.0/2024-01-04/bin/linux/amd64/kubectl
       - chmod +x kubectl
-      - mv kubectl /usr/local/bin/
+      - mv kubectl /usr/local/bin/kubectl
+      - export PATH=/usr/local/bin:$PATH
       - echo "kubectl installed successfully"
   pre_build:
     commands:
@@ -34,6 +35,7 @@ phases:
       - echo "Setting up kubeconfig..."
       - aws eks update-kubeconfig --region $AWS_REGION --name $CLUSTER_NAME
       - echo "Testing kubectl..."
+      - export PATH=/usr/local/bin:$PATH
       - kubectl version --client || echo "kubectl client version check complete"
   build:
     commands:
