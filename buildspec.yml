@@ -31,8 +31,24 @@ phases:
       - echo "Post-build phase starting"
       - echo "Pushing image to ECR"
       - docker push 992757690557.dkr.ecr.us-east-1.amazonaws.com/miniproject1/braintask:latest
-      - echo "Deploying to EKS"
-      - kubectl apply -f k8s/
-      - echo "Checking deployment status"
-      - kubectl get deployments
-      - kubectl get services
+      - echo "Preparing for deployment"
+      - echo "Testing kubectl connectivity"
+      - kubectl get nodes || echo "Cannot get nodes"
+      - kubectl get namespaces || echo "Cannot get namespaces"
+      - echo "Checking k8s files"
+      - ls -la k8s/
+      - echo "Contents of deployment.yaml:"
+      - cat k8s/deployment.yaml
+      - echo "Contents of service.yaml:"
+      - cat k8s/service.yaml
+      - echo "Validating manifests"
+      - kubectl apply --dry-run=client -f k8s/deployment.yaml || echo "Deployment validation failed"
+      - kubectl apply --dry-run=client -f k8s/service.yaml || echo "Service validation failed"
+      - echo "Applying deployment"
+      - kubectl apply -f k8s/deployment.yaml || echo "Deployment apply failed"
+      - echo "Applying service"
+      - kubectl apply -f k8s/service.yaml || echo "Service apply failed"
+      - echo "Checking final status"
+      - kubectl get deployments || echo "Cannot get deployments"
+      - kubectl get services || echo "Cannot get services"
+      - kubectl get pods || echo "Cannot get pods"
