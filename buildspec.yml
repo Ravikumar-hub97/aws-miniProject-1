@@ -13,20 +13,19 @@ phases:
       - curl -LO https://s3.us-east-1.amazonaws.com/amazon-eks/1.29.0/2024-05-31/bin/linux/amd64/kubectl
       - chmod +x kubectl
       - mv kubectl /usr/local/bin/
-      - echo "kubectl installed."
 
   pre_build:
     commands:
-      - echo "Authenticating with ECR..."
+      - echo "Checking identity..."
+      - aws sts get-caller-identity
+
+      - echo "Logging into Amazon ECR..."
       - aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $ECR_REPO
 
-      - echo "Updating kubeconfig for EKS cluster..."
+      - echo "Configuring kubectl for EKS..."
       - aws eks update-kubeconfig --name $CLUSTER_NAME --region $AWS_REGION
 
       - echo "Verifying EKS access..."
-      - aws sts get-caller-identity
-      - aws eks describe-cluster --name $CLUSTER_NAME --region $AWS_REGION
-      - kubectl version --short
       - kubectl get nodes
 
   build:
@@ -41,9 +40,4 @@ phases:
       - docker push $ECR_REPO:latest
 
       - echo "Deploying to EKS..."
-      - |
-        if [ -d "k8s" ]; then
-          kubectl apply -f k8s/
-        else
-          echo "k8s/ directory not found, skipping deployment."
-        fi
+      - kubectl apply -f k8s/
