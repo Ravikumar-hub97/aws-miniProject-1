@@ -1,78 +1,38 @@
 version: 0.2
-env:
-  variables:
-    CLUSTER_NAME: "project-cluster"
-    AWS_REGION: "us-east-1"
-    ECR_REPO: "992757690557.dkr.ecr.us-east-1.amazonaws.com/miniproject1/braintask"
 phases:
   install:
     runtime-versions:
       docker: 19
     commands:
-      - echo "Starting installation phase..."
-      - echo "Using CodeBuild with VPC configuration"
-      # Most tools should already be available in CodeBuild Amazon Linux
-      - which curl || yum install -y curl
-      - which unzip || yum install -y unzip
-      - echo "Basic tools verified"
+      - echo "Starting installation phase"
   pre_build:
     commands:
-      - echo "Pre-build phase starting..."
-      - echo "Verifying AWS access..."
+      - echo "Pre-build phase starting"
+      - echo "Verifying AWS access"
       - aws sts get-caller-identity
-      - echo "AWS CLI version:"
-      - aws --version
-      # Try to use existing kubectl or install it
-      - echo "Checking for kubectl..."
-      - kubectl version --client || echo "kubectl not found, will try to install"
-      # Alternative method: Install kubectl using package manager (works in VPC)
-      - |
-        if ! kubectl version --client 2>/dev/null; then
-          echo "Installing kubectl from kubernetes repository..."
-          cat <<EOF > /etc/yum.repos.d/kubernetes.repo
-        [kubernetes]
-        name=Kubernetes
-        baseurl=https://pkgs.k8s.io/core:/stable:/v1.29/rpm/
-        enabled=1
-        gpgcheck=1
-        gpgkey=https://pkgs.k8s.io/core:/stable:/v1.29/rpm/repodata/repomd.xml.key
-        EOF
-          yum install -y kubectl || echo "Package install failed, trying direct download"
-        fi
-      # Fallback: try direct download if package install failed
-      - |
-        if ! kubectl version --client 2>/dev/null; then
-          echo "Trying direct download method..."
-          curl -LO "https://dl.k8s.io/release/v1.29.0/bin/linux/amd64/kubectl" || true
-          if [ -f kubectl ]; then
-            chmod +x kubectl
-            sudo mv kubectl /usr/local/bin/kubectl
-          fi
-        fi
-      - kubectl version --client || echo "kubectl installation attempted"
-      - echo "Logging into Amazon ECR..."
-      - aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $ECR_REPO
-      - echo "Setting up kubeconfig..."
-      - aws eks update-kubeconfig --region $AWS_REGION --name $CLUSTER_NAME
-      - echo "Testing cluster connection..."
-      - kubectl get nodes || echo "Node connectivity test completed"
+      - echo "Installing kubectl"
+      - curl -o kubectl https://amazon-eks.s3.us-west-2.amazonaws.com/1.21.2/2021-07-05/bin/linux/amd64/kubectl
+      - chmod +x ./kubectl
+      - mkdir -p $HOME/bin && cp ./kubectl $HOME/bin/kubectl && export PATH=$PATH:$HOME/bin
+      - kubectl version --client
+      - echo "Logging into Amazon ECR"
+      - aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin 992757690557.dkr.ecr.us-east-1.amazonaws.com/miniproject1/braintask
+      - echo "Setting up kubeconfig"
+      - aws eks update-kubeconfig --region us-east-1 --name project-cluster
   build:
     commands:
-      - echo "Build phase starting..."
-      - echo "Building Docker image..."
+      - echo "Build phase starting"
+      - echo "Building Docker image"
       - docker build -t braintask .
-      - echo "Tagging Docker image..."
-      - docker tag braintask:latest $ECR_REPO:latest
-      - echo "Build completed successfully"
+      - echo "Tagging Docker image"
+      - docker tag braintask:latest 992757690557.dkr.ecr.us-east-1.amazonaws.com/miniproject1/braintask:latest
   post_build:
     commands:
-      - echo "Post-build phase starting..."
-      - echo "Pushing image to ECR..."
-      - docker push $ECR_REPO:latest
-      - echo "Image pushed successfully"
-      - echo "Deploying to EKS..."
+      - echo "Post-build phase starting"
+      - echo "Pushing image to ECR"
+      - docker push 992757690557.dkr.ecr.us-east-1.amazonaws.com/miniproject1/braintask:latest
+      - echo "Deploying to EKS"
       - kubectl apply -f k8s/
-      - echo "Checking deployment status..."
-      - kubectl get deployments -o wide
-      - kubectl get services -o wide
-      - echo "Deployment completed successfully"
+      - echo "Checking deployment status"
+      - kubectl get deployments
+      - kubectl get services
