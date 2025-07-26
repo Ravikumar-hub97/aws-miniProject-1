@@ -8,21 +8,30 @@ env:
 
 phases:
   install:
+    runtime-versions:
+      docker: 20
     commands:
+      - echo "Installing AWS CLI..."
+      - curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+      - unzip awscliv2.zip
+      - sudo ./aws/install
+      - aws --version
+
       - echo "Installing kubectl..."
       - curl -LO https://s3.us-east-1.amazonaws.com/amazon-eks/1.29.0/2024-05-31/bin/linux/amd64/kubectl
       - chmod +x kubectl
       - mv kubectl /usr/local/bin/
+      - kubectl version --client
 
   pre_build:
     commands:
-      - echo "Checking identity..."
+      - echo "Checking AWS Identity..."
       - aws sts get-caller-identity
 
       - echo "Logging into Amazon ECR..."
       - aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $ECR_REPO
 
-      - echo "Configuring kubectl for EKS..."
+      - echo "Updating kubeconfig..."
       - aws eks update-kubeconfig --name $CLUSTER_NAME --region $AWS_REGION
 
       - echo "Verifying EKS access..."
