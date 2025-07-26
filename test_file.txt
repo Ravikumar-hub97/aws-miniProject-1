@@ -1,4 +1,3 @@
-ABC
 this is to trigger pipelin
 This is to trigger pipeline
 This is to trigger pipeline
