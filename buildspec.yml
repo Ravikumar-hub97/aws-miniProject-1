@@ -1,35 +1,74 @@
 version: 0.2
 
+env:
+  variables:
+    CLUSTER_NAME: "project-cluster"
+    AWS_REGION: "us-east-1"
+    ECR_REPO: "992757690557.dkr.ecr.us-east-1.amazonaws.com/miniproject1/braintask"
+
 phases:
   install:
+    runtime-versions:
+      docker: 20
     commands:
       - echo Installing kubectl...
       - curl -o kubectl https://s3.us-east-1.amazonaws.com/amazon-eks/1.29.0/2024-05-31/bin/linux/amd64/kubectl
       - chmod +x ./kubectl
-      - mv ./kubectl /usr/local/bin
+      - mv ./kubectl /usr/local/bin/kubectl
 
   pre_build:
     commands:
       - echo Logging in to Amazon ECR...
-      - aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin 992757690557.dkr.ecr.us-east-1.amazonaws.com
-      - echo Updating kubeconfig...
-      - aws eks update-kubeconfig --name project-cluster --region us-east-1 || exit 1
-      - echo Verifying kubectl can talk to the cluster...
-      - echo "Checking kubectl access..."
-      - aws sts get-caller-identity
-      - aws eks describe-cluster --name project-cluster --region us-east-1
-      - kubectl version --short
+      - aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $ECR_REPO
+
+      - echo Getting EKS cluster info and configuring kubectl manually...
+      - export EKS_ENDPOINT=$(aws eks describe-cluster --name $CLUSTER_NAME --region $AWS_REGION --query "cluster.endpoint" --output text)
+      - export EKS_CERT=$(aws eks describe-cluster --name $CLUSTER_NAME --region $AWS_REGION --query "cluster.certificateAuthority.data" --output text)
+      - mkdir -p ~/.kube
+      - |
+        cat <<EOF > ~/.kube/config
+        apiVersion: v1
+        clusters:
+        - cluster:
+            server: $EKS_ENDPOINT
+            certificate-authority-data: $EKS_CERT
+          name: eks
+        contexts:
+        - context:
+            cluster: eks
+            user: eks-user
+          name: eks
+        current-context: eks
+        kind: Config
+        preferences: {}
+        users:
+        - name: eks-user
+          user:
+            exec:
+              apiVersion: "client.authentication.k8s.io/v1beta1"
+              command: "aws"
+              args:
+                - "eks"
+                - "get-token"
+                - "--cluster-name"
+                - "$CLUSTER_NAME"
+                - "--region"
+                - "$AWS_REGION"
+        EOF
+
+      - echo Verifying access to cluster...
       - kubectl get nodes || exit 1
-      - kubectl get nodes || exit 1
+
   build:
     commands:
       - echo Building Docker image...
-      - docker build -t miniproject1/braintask .
-      - docker tag miniproject1/braintask:latest 992757690557.dkr.ecr.us-east-1.amazonaws.com/miniproject1/braintask:latest
+      - docker build -t braintask .
+      - docker tag braintask:latest $ECR_REPO:latest
 
   post_build:
     commands:
       - echo Pushing image to ECR...
-      - docker push 992757690557.dkr.ecr.us-east-1.amazonaws.com/miniproject1/braintask:latest
+      - docker push $ECR_REPO:latest
+
       - echo Deploying to EKS...
       - kubectl apply -f k8s/
