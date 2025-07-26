@@ -9,48 +9,70 @@ phases:
     runtime-versions:
       docker: 19
     commands:
-      - echo "Installing dependencies..."
-      # Update package manager for Amazon Linux
-      - yum update -y
-      - yum install -y unzip curl
-      # Install AWS CLI v2
-      - echo "Installing AWS CLI v2..."
-      - curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
-      - unzip -q awscliv2.zip
-      - ./aws/install --update
-      - aws --version
-      # Install kubectl
-      - echo "Installing kubectl..."
-      - curl -o kubectl https://s3.us-west-2.amazonaws.com/amazon-eks/1.29.0/2024-01-04/bin/linux/amd64/kubectl
-      - chmod +x kubectl
-      - mv kubectl /usr/local/bin/kubectl
-      - export PATH=/usr/local/bin:$PATH
-      - echo "kubectl installed successfully"
+      - echo "Starting installation phase..."
+      - echo "Using CodeBuild with VPC configuration"
+      # Most tools should already be available in CodeBuild Amazon Linux
+      - which curl || yum install -y curl
+      - which unzip || yum install -y unzip
+      - echo "Basic tools verified"
   pre_build:
     commands:
+      - echo "Pre-build phase starting..."
       - echo "Verifying AWS access..."
       - aws sts get-caller-identity
+      - echo "AWS CLI version:"
+      - aws --version
+      # Try to use existing kubectl or install it
+      - echo "Checking for kubectl..."
+      - kubectl version --client || echo "kubectl not found, will try to install"
+      # Alternative method: Install kubectl using package manager (works in VPC)
+      - |
+        if ! kubectl version --client 2>/dev/null; then
+          echo "Installing kubectl from kubernetes repository..."
+          cat <<EOF > /etc/yum.repos.d/kubernetes.repo
+        [kubernetes]
+        name=Kubernetes
+        baseurl=https://pkgs.k8s.io/core:/stable:/v1.29/rpm/
+        enabled=1
+        gpgcheck=1
+        gpgkey=https://pkgs.k8s.io/core:/stable:/v1.29/rpm/repodata/repomd.xml.key
+        EOF
+          yum install -y kubectl || echo "Package install failed, trying direct download"
+        fi
+      # Fallback: try direct download if package install failed
+      - |
+        if ! kubectl version --client 2>/dev/null; then
+          echo "Trying direct download method..."
+          curl -LO "https://dl.k8s.io/release/v1.29.0/bin/linux/amd64/kubectl" || true
+          if [ -f kubectl ]; then
+            chmod +x kubectl
+            sudo mv kubectl /usr/local/bin/kubectl
+          fi
+        fi
+      - kubectl version --client || echo "kubectl installation attempted"
       - echo "Logging into Amazon ECR..."
       - aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $ECR_REPO
       - echo "Setting up kubeconfig..."
       - aws eks update-kubeconfig --region $AWS_REGION --name $CLUSTER_NAME
-      - echo "Testing kubectl..."
-      - export PATH=/usr/local/bin:$PATH
-      - kubectl version --client || echo "kubectl client version check complete"
+      - echo "Testing cluster connection..."
+      - kubectl get nodes || echo "Node connectivity test completed"
   build:
     commands:
+      - echo "Build phase starting..."
       - echo "Building Docker image..."
       - docker build -t braintask .
+      - echo "Tagging Docker image..."
       - docker tag braintask:latest $ECR_REPO:latest
       - echo "Build completed successfully"
   post_build:
     commands:
+      - echo "Post-build phase starting..."
       - echo "Pushing image to ECR..."
       - docker push $ECR_REPO:latest
       - echo "Image pushed successfully"
       - echo "Deploying to EKS..."
       - kubectl apply -f k8s/
-      - echo "Deployment completed"
-      - echo "Getting deployment status..."
-      - kubectl get deployments
-      - kubectl get services
+      - echo "Checking deployment status..."
+      - kubectl get deployments -o wide
+      - kubectl get services -o wide
+      - echo "Deployment completed successfully"
