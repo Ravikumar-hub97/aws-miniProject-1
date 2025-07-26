@@ -1,59 +1,54 @@
 version: 0.2
-
 env:
   variables:
     CLUSTER_NAME: "project-cluster"
     AWS_REGION: "us-east-1"
     ECR_REPO: "992757690557.dkr.ecr.us-east-1.amazonaws.com/miniproject1/braintask"
-
 phases:
   install:
     runtime-versions:
-      docker: 19
+      docker: 20
     commands:
       - echo "Installing dependencies..."
-
-      # Install unzip and curl
-      - apt-get update || yum update -y || true
-      - apt-get install -y unzip curl || yum install -y unzip curl || true
-
+      # Update package manager
+      - apt-get update -y
+      - apt-get install -y unzip curl
       # Install AWS CLI v2
+      - echo "Installing AWS CLI v2..."
       - curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
       - unzip -q awscliv2.zip
-      - ./aws/install || sudo ./aws/install
-      - export PATH=$PATH:/usr/local/bin
+      - ./aws/install --update
       - aws --version
-
-      # Install correct kubectl binary
+      # Install kubectl
       - echo "Installing kubectl..."
-      - curl -o kubectl https://s3.us-west-2.amazonaws.com/amazon-eks/1.29.0/2024-05-31/bin/linux/amd64/kubectl
+      - curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
       - chmod +x kubectl
       - mv kubectl /usr/local/bin/
-      - which kubectl
-      - kubectl version --client=true
-
+      - kubectl version --client --output=yaml
   pre_build:
     commands:
       - echo "Verifying AWS access..."
       - aws sts get-caller-identity
-
       - echo "Logging into Amazon ECR..."
       - aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $ECR_REPO
-
       - echo "Setting up kubeconfig..."
       - aws eks update-kubeconfig --region $AWS_REGION --name $CLUSTER_NAME
-      - kubectl get nodes || echo "kubectl might not see nodes if cluster is new"
-
+      - echo "Verifying kubectl connection..."
+      - kubectl get nodes || echo "kubectl connection test - this may fail if cluster is not ready"
   build:
     commands:
       - echo "Building Docker image..."
       - docker build -t braintask .
       - docker tag braintask:latest $ECR_REPO:latest
-
+      - echo "Build completed successfully"
   post_build:
     commands:
       - echo "Pushing image to ECR..."
       - docker push $ECR_REPO:latest
-
+      - echo "Image pushed successfully"
       - echo "Deploying to EKS..."
       - kubectl apply -f k8s/
+      - echo "Deployment completed"
+      - echo "Getting deployment status..."
+      - kubectl get deployments
+      - kubectl get services
