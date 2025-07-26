@@ -8,56 +8,22 @@ env:
 
 phases:
   install:
-    runtime-versions:
-      docker: 20
     commands:
       - echo Installing kubectl...
-      - curl -o kubectl https://s3.us-east-1.amazonaws.com/amazon-eks/1.29.0/2024-05-31/bin/linux/amd64/kubectl
-      - chmod +x ./kubectl
-      - mv ./kubectl /usr/local/bin/kubectl
+      - curl -LO https://s3.us-east-1.amazonaws.com/amazon-eks/1.29.0/2024-05-31/bin/linux/amd64/kubectl
+      - chmod +x kubectl
+      - mv kubectl /usr/local/bin/
 
   pre_build:
     commands:
-      - echo Logging in to Amazon ECR...
+      - echo Logging into Amazon ECR...
       - aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $ECR_REPO
 
-      - echo Getting EKS cluster info and configuring kubectl manually...
-      - export EKS_ENDPOINT=$(aws eks describe-cluster --name $CLUSTER_NAME --region $AWS_REGION --query "cluster.endpoint" --output text)
-      - export EKS_CERT=$(aws eks describe-cluster --name $CLUSTER_NAME --region $AWS_REGION --query "cluster.certificateAuthority.data" --output text)
-      - mkdir -p ~/.kube
-      - |
-        cat <<EOF > ~/.kube/config
-        apiVersion: v1
-        clusters:
-        - cluster:
-            server: $EKS_ENDPOINT
-            certificate-authority-data: $EKS_CERT
-          name: eks
-        contexts:
-        - context:
-            cluster: eks
-            user: eks-user
-          name: eks
-        current-context: eks
-        kind: Config
-        preferences: {}
-        users:
-        - name: eks-user
-          user:
-            exec:
-              apiVersion: "client.authentication.k8s.io/v1beta1"
-              command: "aws"
-              args:
-                - "eks"
-                - "get-token"
-                - "--cluster-name"
-                - "$CLUSTER_NAME"
-                - "--region"
-                - "$AWS_REGION"
-        EOF
+      - echo Configuring kubectl...
+      - aws eks update-kubeconfig --name $CLUSTER_NAME --region $AWS_REGION
 
-      - echo Verifying access to cluster...
-      - kubectl get nodes || exit 1
+      - echo Verifying EKS access...
+      - kubectl get nodes
 
   build:
     commands:
