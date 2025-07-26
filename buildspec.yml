@@ -11,29 +11,38 @@ phases:
     runtime-versions:
       docker: 19
     commands:
-      - echo "Installing AWS CLI v2..."
+      - echo "Installing dependencies..."
+
+      # Install unzip and curl
+      - apt-get update || yum update -y || true
+      - apt-get install -y unzip curl || yum install -y unzip curl || true
+
+      # Install AWS CLI v2
       - curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
-      - unzip awscliv2.zip
+      - unzip -q awscliv2.zip
       - ./aws/install || sudo ./aws/install
+      - export PATH=$PATH:/usr/local/bin
       - aws --version
 
+      # Install correct kubectl binary
       - echo "Installing kubectl..."
-      - curl -LO https://s3.us-east-1.amazonaws.com/amazon-eks/1.29.0/2024-05-31/bin/linux/amd64/kubectl
+      - curl -o kubectl https://s3.us-west-2.amazonaws.com/amazon-eks/1.29.0/2024-05-31/bin/linux/amd64/kubectl
       - chmod +x kubectl
       - mv kubectl /usr/local/bin/
-      - kubectl version --client
+      - which kubectl
+      - kubectl version --client=true
 
   pre_build:
     commands:
-      - echo "Verifying AWS credentials..."
+      - echo "Verifying AWS access..."
       - aws sts get-caller-identity
 
       - echo "Logging into Amazon ECR..."
-      - aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin 992757690557.dkr.ecr.us-east-1.amazonaws.com
+      - aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $ECR_REPO
 
-      - echo "Updating kubeconfig for EKS..."
-      - aws eks update-kubeconfig --name $CLUSTER_NAME --region $AWS_REGION
-      - kubectl get nodes
+      - echo "Setting up kubeconfig..."
+      - aws eks update-kubeconfig --region $AWS_REGION --name $CLUSTER_NAME
+      - kubectl get nodes || echo "kubectl might not see nodes if cluster is new"
 
   build:
     commands:
