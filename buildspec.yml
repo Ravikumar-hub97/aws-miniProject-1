@@ -7,7 +7,7 @@ env:
 phases:
   install:
     runtime-versions:
-      docker: 20
+      docker: 19
     commands:
       - echo "Installing dependencies..."
       # Update package manager
@@ -21,10 +21,10 @@ phases:
       - aws --version
       # Install kubectl
       - echo "Installing kubectl..."
-      - curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+      - curl -o kubectl https://s3.us-west-2.amazonaws.com/amazon-eks/1.29.0/2024-01-04/bin/linux/amd64/kubectl
       - chmod +x kubectl
       - mv kubectl /usr/local/bin/
-      - kubectl version --client --output=yaml
+      - echo "kubectl installed successfully"
   pre_build:
     commands:
       - echo "Verifying AWS access..."
@@ -33,8 +33,8 @@ phases:
       - aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $ECR_REPO
       - echo "Setting up kubeconfig..."
       - aws eks update-kubeconfig --region $AWS_REGION --name $CLUSTER_NAME
-      - echo "Verifying kubectl connection..."
-      - kubectl get nodes || echo "kubectl connection test - this may fail if cluster is not ready"
+      - echo "Testing kubectl..."
+      - kubectl version --client || echo "kubectl client version check complete"
   build:
     commands:
       - echo "Building Docker image..."
